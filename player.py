@@ -1,7 +1,7 @@
 import pygame
 import time
 
-Class FormaJogador:
+class FormaJogador:
   def __init__ (self):
     self.nome = "base"
     self.forca_pulo = -10
@@ -22,5 +22,13 @@ class FormaFantasma(FormaJogador):
         self.pode_atravessar_obstaculos = True
         self.causa_dano_impacto = False
 
+class FormaHumana(FormaJogador):
+    def __init__(self):
+        super().__init__()
+        self.nome = "Humano"
+        self.forca_pulo = -8
+        self.gravidade = 0.8
+        self.pode_atravessar_obstaculos = False
+        self.causa_dano_impacto = True
 
     

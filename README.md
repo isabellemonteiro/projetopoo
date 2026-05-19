@@ -18,7 +18,7 @@ Humano: Movimentação pesada, queda rápida e causa dano em pontos fracos.
 Esqueletos e Morcegos: Inimigos básicos que patrulham o mapa.
 Obstáculos de Cenário: abismos, caixões, etc (dano instantâneo).
 O CHEFE FINAL (Scorpion): Uma entidade gigante.
-Ataques: Esmagamento com as mãos, sopro de vento.
+Ataques: Esmagamento.
 Ponto Fraco: Um cristal no peito que só pode ser quebrado por um impacto físico.
 6. Cenário (Mapa)
 Ambiente: Masmorras de pedra com iluminação azulada e roxa.

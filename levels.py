@@ -1,82 +1,142 @@
 import pygame
-import random
-import math
+from settings import TAMANHO_BLOCO as T, LARGURA
+from enemies import Esqueleto, Morcego
+import visual
 
-class Enemy:
-    def __init__(self, x, y, type):
-        self.type = type 
-        self.rect = pygame.Rect(x, y, 30, 30)
-        self.speed = random.uniform(2, 4)
-        self.direction = 1
-        self.initial_y = y
+MAPA_FASE_1 = [
+    ".............................................................................................................................................................................................................................................................................................................................................................................",
+    ".............................................................................................................................................................................................................................................................................................................................................................................",
+    ".............................................................................................................................................................................................................................................................................................................................................................................",
+    "......................................................................................................................................................................R......................................................................................................................................................................................................",
+    ".....................................................................................................................................................................###......................CC.............................................................................................................................................................................",
+    "........................................................................M.........................................................................................C...........................##...................................................................M...........................................................................M.............................",
+    "..................................................................M...............................M..............................................................###.......................C...............................M.................................M...........................................................................M...................................",
+    "..........................................CC.............................................................................CC...................................C...........................##......................................................................................CC.........................................M...............................................",
+    "...............................C.........####......................................CC....................................##...............C..................###.......................C.....................CC..................................C................................##...........................CC............C...............................................",
+    "............CCC......................................................C.............##..................................####...........................................................##.....................##.................................................................####...........................##................................................CC.C........",
+    "..P.................E.............................E.....F......................................E.....E......F........######....E........H...........F.........................F.........................................E.....E......F.........H...........E....E....E........######....E......F.......................................E....E....E.......F..............G....",
+]
 
-    def update(self, speed_multiplier):
-        current_speed = self.speed * speed_multiplier
-        if self.type == 'bat':
-           
-            self.rect.x -= current_speed
-            self.rect.y = self.initial_y + int(math.sin(self.rect.x * 0.05) * 30)
-        elif self.type == 'skeleton':
-           
-            self.rect.x -= current_speed
+BURACOS_FASE_1 = [(30, 32), (82, 85), (137, 139), (198, 200), (204, 207), (240, 242), (296, 298), (302, 305), (316, 318)]
 
-class LevelManager:
-    def __init__(self, screen_width, screen_height):
-        self.screen_width = screen_width
-        self.screen_height = screen_height
-        
-        
-        self.platforms = [
-            pygame.Rect(0, 500, 350, 100),
-            pygame.Rect(500, 500, 400, 100),
-            pygame.Rect(200, 380, 150, 20)
-        ]
-        
-        self.enemies = []
-        self.spawn_timer = 0
-        self.portal_rect = None
-        self.portal_spawned = False
+MAPA_CHEFE = [
+    "........................",
+    "........................",
+    "........................",
+    "........................",
+    "........................",
+    "........................",
+    "........................",
+    "..####............####..",
+    "........................",
+    "........................",
+    "..P.............B....X..",
+]
 
-    def update(self, delta_time, total_time, phase_duration):
-       
-        progress = min(total_time / phase_duration, 1.0)
-        speed_multiplier = 1.0 + progress
 
-        
-        if total_time < phase_duration:
-            self.spawn_timer += delta_time
-            spawn_interval = max(0.5, 2.0 - (progress * 1.2)) 
-            
-            if self.spawn_timer >= spawn_interval:
-                self.spawn_timer = 0
-                enemy_type = random.choice(['bat', 'skeleton'])
-                spawn_y = random.randint(200, 350) if enemy_type == 'bat' else 470
-                self.enemies.append(Enemy(self.screen_width + 20, spawn_y, enemy_type))
-        
-        
-        elif not self.portal_spawned:
-            self.portal_spawned = True
-            self.portal_rect = pygame.Rect(650, 400, 50, 100)
+class PlataformaMovel:
 
-        
-        for enemy in self.enemies[:]:
-            enemy.update(speed_multiplier)
-            if enemy.rect.right < 0:
-                self.enemies.remove(enemy)
+    def __init__(self, x, y, largura=80, alcance=160, velocidade=1.5):
+        self.rect = pygame.Rect(x, y, largura, 20)
+        self.x = float(x)
+        self.x_minimo = x
+        self.alcance = alcance
+        self.velocidade = velocidade
+        self.direcao = 1
 
-    def draw(self, surface):
-        
-        for plat in self.platforms:
-            pygame.draw.rect(surface, (50, 50, 60), plat)
-            pygame.draw.rect(surface, (30, 30, 40), plat, 3) 
+    def mover(self, jogador):
+        em_cima = (abs(jogador.rect.bottom - self.rect.top) <= 2
+                   and jogador.rect.right > self.rect.left and jogador.rect.left < self.rect.right)
+        antes = self.rect.x
+        self.x += self.direcao * self.velocidade
+        if self.x >= self.x_minimo + self.alcance:
+            self.direcao = -1
+        elif self.x <= self.x_minimo:
+            self.direcao = 1
+        self.rect.x = round(self.x)
+        if em_cima:                   
+            jogador.empurrar(self.rect.x - antes)
 
-        
-        for enemy in self.enemies:
-            if enemy.type == 'bat':
-                pygame.draw.ellipse(surface, (100, 50, 150), enemy.rect) 
-            else:
-                pygame.draw.rect(surface, (220, 220, 200), enemy.rect) 
 
-        # Desenhar Portal
-        if self.portal_rect:
-            pygame.draw.ellipse(surface, (0, 255, 200), self.portal_rect, 4)
+class Nivel:
+    def __init__(self, mapa, buracos=()):
+        self.linhas = len(mapa)
+        self.colunas = max(len(l) for l in mapa)
+        self.largura_px = self.colunas * T
+        self.blocos = []
+        self.cristais = []
+        self.inimigos = []
+        self.plataformas = []
+        self.checkpoints = []            
+        self.inicio = (T, T)
+        self.espelho_secreto = None
+        self.espelho_usado = False
+        self.grande_espelho = None
+        self.pos_chefe = None
+        self.portal = None
+        self.portal_aberto = False
+
+        for linha, texto in enumerate(mapa):
+            for coluna, letra in enumerate(texto.ljust(self.colunas, ".")):
+                self._criar_objeto(letra, coluna * T, linha * T)
+
+        for coluna in range(self.colunas):   
+            if not any(a <= coluna <= b for a, b in buracos):
+                for k in range(2):
+                    self.blocos.append(pygame.Rect(coluna * T, (self.linhas + k) * T, T, T))
+
+    def _criar_objeto(self, letra, x, y):
+        base = y + T  
+        if letra == "#":
+            self.blocos.append(pygame.Rect(x, y, T, T))
+        elif letra == "C":
+            self.cristais.append(pygame.Rect(x + 8, y + 8, 24, 24))
+        elif letra == "E":
+            self.inimigos.append(Esqueleto(x + 4, base - 44))
+        elif letra == "M":
+            self.inimigos.append(Morcego(x, y))
+        elif letra == "H":
+            self.plataformas.append(PlataformaMovel(x - T, y))
+        elif letra == "F":
+            self.checkpoints.append({"rect": pygame.Rect(x + 6, base - 60, 28, 60), "ativo": False})
+        elif letra == "R":
+            self.espelho_secreto = pygame.Rect(x, base - 80, 40, 80)
+        elif letra == "G":
+            self.grande_espelho = pygame.Rect(x - 20, base - 190, 120, 190)
+        elif letra == "P":
+            self.inicio = (x + 4, base - 48)
+        elif letra == "B":
+            self.pos_chefe = (x, base)
+        elif letra == "X":
+            self.portal = pygame.Rect(x, base - 100, 60, 100)
+
+    def solidos(self):
+
+        return self.blocos + [p.rect for p in self.plataformas]
+
+    def atualizar(self, jogador):
+        for plataforma in self.plataformas:
+            plataforma.mover(jogador)
+        for inimigo in self.inimigos:
+            inimigo.atualizar(self.blocos)
+        self.inimigos = [i for i in self.inimigos if i.vivo]
+
+    def desenhar(self, tela, cam_x, t):
+    
+        for bloco in self.blocos:
+            if bloco.right > cam_x and bloco.left < cam_x + LARGURA:
+                visual.desenhar_bloco(tela, bloco.move(-cam_x, 0))
+        for p in self.plataformas:
+            visual.desenhar_plataforma_movel(tela, p.rect.move(-cam_x, 0))
+        for c in self.cristais:
+            visual.desenhar_cristal(tela, c.move(-cam_x, 0), t)
+        for ck in self.checkpoints:
+            visual.desenhar_tocha(tela, ck["rect"].move(-cam_x, 0), ck["ativo"], t)
+        if self.espelho_secreto:
+            visual.desenhar_espelho(tela, self.espelho_secreto.move(-cam_x, 0), t, not self.espelho_usado)
+        if self.grande_espelho:
+            visual.desenhar_grande_espelho(tela, self.grande_espelho.move(-cam_x, 0), t)
+        if self.portal and self.portal_aberto:
+            visual.desenhar_portal(tela, self.portal.move(-cam_x, 0), t)
+        for inimigo in self.inimigos:
+            inimigo.desenhar(tela, cam_x, t)

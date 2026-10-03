@@ -1,138 +1,124 @@
 import pygame
+from entidade import Entidade
+from settings import VIDAS_INICIAIS, PONTOS_CRISTAL, TEMPO_INVENCIVEL
+import visual
 
-class Bullet:
+FANTASMA = "fantasma"
+HUMANO = "humano"
+
+
+class Jogador(Entidade):
+    ATRIBUTOS = {
+        FANTASMA: {"velocidade": 4.0, "gravidade": 0.40, "pulo": -14.5, "queda_maxima": 3.2},   
+        HUMANO:   {"velocidade": 3.2, "gravidade": 0.90, "pulo": -17.0, "queda_maxima": 16.0}, 
+    }
+
     def __init__(self, x, y):
-        self.rect = pygame.Rect(x, y, 15, 8)
-        self.speed = 10
+        super().__init__(x, y, 32, 48)
+        self.__vidas = VIDAS_INICIAIS      
+        self.__pontos = 0
+        self.__forma = FANTASMA
+        self._invencivel_ate = 0           
+        self.pode_trocar_forma = False      
+        self.sprites = {FANTASMA: visual.carregar_sprite("fantasma.png", (62, 66)),
+                        HUMANO: visual.carregar_sprite("humano.png", (50, 66))}
 
-    def update(self):
-        self.rect.x += self.speed
+    
+    @property
+    def vidas(self):
+        return self.__vidas
 
-class Player:
-    def __init__(self, x, y):
-        self.rect = pygame.Rect(x, y, 30, 50)
-        self.x = x
-        self.y = y
-        self.vx = 0
-        self.vy = 0
-        self.on_ground = False
+    @vidas.setter
+    def vidas(self, valor):
+        self.__vidas = max(0, min(VIDAS_INICIAIS, valor)) 
+
+    @property
+    def pontos(self):
+        return self.__pontos
+
+    @property
+    def forma(self):
+        return self.__forma
+
+    @property
+    def invencivel(self):
+        return pygame.time.get_ticks() < self._invencivel_ate
+
+    def pular(self):
+        if self.no_chao:
+            self.vel_y = self.ATRIBUTOS[self.__forma]["pulo"]
+            self.no_chao = False
+
+    def soltar_pulo(self):
+
+        if self.vel_y < -4:
+            self.vel_y *= 0.5
+
+    def quicar(self, forca=9):
+        self.vel_y = -forca
+        self.no_chao = False
+
+    def mudar_forma(self, nova_forma):
+        self.__forma = nova_forma
+
+    def trocar_forma(self):
+        if not self.pode_trocar_forma:
+            return False
+        self.mudar_forma(HUMANO if self.__forma == FANTASMA else FANTASMA)
+        return True
+
+    def coletar_cristal(self):
+        self.__pontos += PONTOS_CRISTAL
+
+    def tomar_dano(self):
+
+        if self.invencivel:
+            return False
+        self.vidas -= 1
+        self._invencivel_ate = pygame.time.get_ticks() + TEMPO_INVENCIVEL
+        self.vel_y = -7
+        return True
+
+    def perder_vida_abismo(self):
+        self.vidas -= 1   
+
+    def reaparecer(self, x, y):
+        self.x, self.y = float(x), float(y)
+        self.rect.topleft = (x, y)
+        self.vel_x = self.vel_y = 0
+        self._invencivel_ate = pygame.time.get_ticks() + TEMPO_INVENCIVEL
+
+    def limitar(self, minimo_x, maximo_x):
         
-        
-        self.lives = 3
-        self.form = 'GHOST' 
-        self.bullets = []
-        self.is_victorious = False
-        self.victory_timer = 0
+        if self.rect.left < minimo_x:
+            self.rect.left = minimo_x
+            self.x = self.rect.x
+        if self.rect.right > maximo_x:
+            self.rect.right = maximo_x
+            self.x = self.rect.x
 
-    def handle_input(self, keys):
-        if self.is_victorious:
+
+    def atualizar(self, teclas, solidos):
+        atr = self.ATRIBUTOS[self.__forma]
+        self.vel_x = 0
+        if teclas[pygame.K_LEFT]:
+            self.vel_x = -atr["velocidade"]
+            self.olhando_direita = False
+        if teclas[pygame.K_RIGHT]:
+            self.vel_x = atr["velocidade"]
+            self.olhando_direita = True
+        self.aplicar_gravidade(atr["gravidade"], atr["queda_maxima"])
+        self.mover(solidos)
+
+    def desenhar(self, tela, cam_x, t):
+        if self.invencivel and (t // 80) % 2 == 0:  
             return
-
-        
-        if self.form == 'GHOST':
-            speed = 5
-        else: # HUMAN
-            speed = 3.5 
-
-        self.vx = 0
-        if keys[pygame.K_LEFT]:
-            self.vx = -speed
-        if keys[pygame.K_RIGHT]:
-            self.vx = speed
-
-    def jump(self):
-        if self.on_ground and not self.is_victorious:
-            if self.form == 'GHOST':
-                self.vy = -12 
-            else:
-                self.vy = -9  
-            self.on_ground = False
-
-    def shoot(self):
-        
-        if self.form == 'HUMAN' and not self.is_victorious:
-            self.bullets.append(Bullet(self.rect.right, self.rect.centery - 4))
-
-    def update(self, platforms):
-        
-        if self.is_victorious:
-            self.vx = 0
-            if self.on_ground:
-                self.vy = -8
-                self.on_ground = False
-
-        
-        if self.form == 'GHOST':
-            gravity = 0.3     
-            max_fall = 6
+        r = self.rect.move(-cam_x, 0)
+        sprite = self.sprites[self.__forma]
+        if sprite:
+            imagem = sprite if self.olhando_direita else pygame.transform.flip(sprite, True, False)
+            tela.blit(imagem, imagem.get_rect(midbottom=r.midbottom))
+        elif self.__forma == FANTASMA:
+            visual.desenhar_fantasma(tela, r, self.olhando_direita, t)
         else:
-            gravity = 0.7     
-            max_fall = 12
-
-        self.vy += gravity
-        if self.vy > max_fall:
-            self.vy = max_fall
-
-        
-        self.x += self.vx
-        self.rect.x = int(self.x)
-        self.move_and_collide(platforms, 'X')
-
-        
-        self.y += self.vy
-        self.rect.y = int(self.y)
-        self.on_ground = False
-        self.move_and_collide(platforms, 'Y')
-
-        
-        for bullet in self.bullets[:]:
-            bullet.update()
-            if bullet.rect.x > 800:
-                self.bullets.remove(bullet)
-
-        
-        if self.rect.y > 600:
-            self.lives = 0
-
-    def move_and_collide(self, platforms, direction):
-        for plat in platforms:
-            if self.rect.colliderect(plat):
-                if direction == 'X':
-                    if self.vx > 0:
-                        self.rect.right = plat.left
-                    if self.vx < 0:
-                        self.rect.left = plat.right
-                    self.x = self.rect.x
-                elif direction == 'Y':
-                    if self.vy > 0:
-                        self.rect.bottom = plat.top
-                        self.vy = 0
-                        self.on_ground = True
-                    if self.vy < 0:
-                        self.rect.top = plat.bottom
-                        self.vy = 0
-                    self.y = self.rect.y
-
-    def reset_position(self):
-        self.x = 50
-        self.y = 300
-        self.rect.x = self.x
-        self.rect.y = self.y
-        self.vx = 0
-        self.vy = 0
-
-    def draw(self, surface):
-        
-        if self.form == 'GHOST':
-            
-            pygame.draw.ellipse(surface, (150, 220, 255), self.rect)
-            pygame.draw.circle(surface, (255, 255, 255), (self.rect.centerx - 5, self.rect.top + 15), 3)
-            pygame.draw.circle(surface, (255, 255, 255), (self.rect.centerx + 5, self.rect.top + 15), 3)
-        else:
-            
-            pygame.draw.rect(surface, (200, 50, 50), self.rect)
-            pygame.draw.rect(surface, (230, 150, 100), (self.rect.x + 5, self.rect.y, 20, 15)) # Rosto
-
-        
-        for bullet in self.bullets:
-            pygame.draw.rect(surface, (255, 255, 0), bullet.rect)
+            visual.desenhar_humano(tela, r, self.olhando_direita, t)

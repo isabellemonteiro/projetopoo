@@ -5,7 +5,6 @@ import visual
 
 
 class Inimigo(Entidade):
-
     def __init__(self, x, y, largura, altura, sprite=None, tamanho_sprite=None):
         super().__init__(x, y, largura, altura, sprite, tamanho_sprite)
         self.vivo = True

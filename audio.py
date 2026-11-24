@@ -3,7 +3,7 @@ import pygame
 from settings import VOLUME_MUSICA, VOLUME_EFEITOS
 
 PASTA_SONS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "sons")
-EXTENSOES = (".ogg", ".mp3", ".wav")  
+EXTENSOES = (".ogg", ".mp3", ".wav")
 
 
 class Audio:
@@ -15,7 +15,7 @@ class Audio:
         try:
             pygame.mixer.init()
         except pygame.error:
-            self.ativo = False     
+            self.ativo = False      
 
     def _achar(self, nome):
         for ext in EXTENSOES:

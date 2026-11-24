@@ -28,6 +28,97 @@ def carregar_sprite(nome, tamanho):
     return _cache_sprites[chave]
 
 
+def carregar_sprite_escala(nome, escala):
+    chave = (nome, "escala", escala)
+    if chave not in _cache_sprites:
+        imagem = None
+        caminho = os.path.join(PASTA_ASSETS, nome)
+        if os.path.exists(caminho):
+            try:
+                imagem = pygame.image.load(caminho).convert_alpha()
+                if escala != 1.0:
+                    novo = (max(1, round(imagem.get_width() * escala)), max(1, round(imagem.get_height() * escala)))
+                    imagem = pygame.transform.smoothscale(imagem, novo)
+            except pygame.error:
+                imagem = None
+        _cache_sprites[chave] = imagem
+    return _cache_sprites[chave]
+
+
+_cache_telas = {}
+_geometria_telas = {}   
+
+
+def carregar_tela_cheia(nome, proporcional=False):
+    chave = (nome, proporcional)
+    if chave not in _cache_telas:
+        imagem = None
+        caminho = os.path.join(PASTA_ASSETS, nome)
+        if os.path.exists(caminho):
+            try:
+                original = pygame.image.load(caminho).convert()
+                if proporcional:
+                    escala = min(LARGURA / original.get_width(), ALTURA / original.get_height())
+                    novo = (int(original.get_width() * escala), int(original.get_height() * escala))
+                    imagem = pygame.Surface((LARGURA, ALTURA))
+                    imagem.fill((10, 6, 28))
+                    imagem.blit(pygame.transform.smoothscale(original, novo),
+                                ((LARGURA - novo[0]) // 2, (ALTURA - novo[1]) // 2))
+                    _geometria_telas[nome] = (escala, (LARGURA - novo[0]) // 2, (ALTURA - novo[1]) // 2)
+                else:
+                    imagem = pygame.transform.smoothscale(original, (LARGURA, ALTURA))
+            except pygame.error:
+                imagem = None
+        _cache_telas[chave] = imagem
+    return _cache_telas[chave]
+
+QUADROS_VITORIA = 16
+FASES_PULO = [(0, 3, 80, 1),       
+              (240, 2, 50, 4),    
+              (340, 6, 110, 6),     
+              (1000, 3, 80, 12),    
+              (1240, 1, 260, 15)]   
+CICLO_PULO = 1500
+AR_INICIO, AR_FIM = 340, 1000
+
+
+def desenhar_heroi_pulando(tela, t, pes, escala, altura_pulo):
+    ciclo = t % CICLO_PULO
+    quadro = 0
+    for inicio, qtd, dur, primeiro in FASES_PULO:
+        if ciclo >= inicio:
+            quadro = primeiro + min(qtd - 1, (ciclo - inicio) // dur)
+    elevacao = 0
+    if AR_INICIO <= ciclo < AR_FIM:          
+        u = (ciclo - AR_INICIO) / (AR_FIM - AR_INICIO)
+        elevacao = altura_pulo * 4 * u * (1 - u)
+    imagem = carregar_sprite_escala(f"vitoria/pular_{quadro}.png", escala)
+    if imagem is None:
+        return False
+    tela.blit(imagem, imagem.get_rect(midbottom=(int(pes[0]), int(pes[1] - elevacao))))
+    return True
+
+
+def geometria_tela(nome):
+    return _geometria_telas.get(nome)
+
+def desenhar_icone_som(tela, r, mudo):
+    fundo = pygame.Surface(r.size, pygame.SRCALPHA)
+    pygame.draw.rect(fundo, (20, 10, 55, 190), fundo.get_rect(), border_radius=8)
+    tela.blit(fundo, r)
+    pygame.draw.rect(tela, (150, 125, 230), r, 2, border_radius=8)
+    cor = (225, 215, 255)
+    cx, cy = r.centerx - 5, r.centery
+    pygame.draw.rect(tela, cor, (cx - 8, cy - 4, 6, 8))
+    pygame.draw.polygon(tela, cor, [(cx - 3, cy - 4), (cx + 4, cy - 10), (cx + 4, cy + 10), (cx - 3, cy + 4)])
+    if mudo:
+        pygame.draw.line(tela, (255, 90, 110), (cx + 8, cy - 7), (cx + 18, cy + 7), 3)
+        pygame.draw.line(tela, (255, 90, 110), (cx + 8, cy + 7), (cx + 18, cy - 7), 3)
+    else:
+        pygame.draw.arc(tela, cor, (cx + 2, cy - 6, 12, 12), -1.0, 1.0, 2)
+        pygame.draw.arc(tela, cor, (cx + 2, cy - 11, 20, 22), -1.0, 1.0, 2)
+
+
 def desenhar_texto(tela, texto, tamanho, cor, centro=None, topo_esq=None, topo_dir=None):
     
     if tamanho not in _cache_fontes:
@@ -44,9 +135,6 @@ def desenhar_texto(tela, texto, tamanho, cor, centro=None, topo_esq=None, topo_d
         ret.topright = topo_dir
     tela.blit(sombra, ret.move(2, 2))
     tela.blit(imagem, ret)
-
-
-
 def _criar_fundo():
     fundo = pygame.Surface((LARGURA, ALTURA))
     for y in range(ALTURA):  
@@ -67,8 +155,7 @@ def _silhueta_castelo(tela, x0):
     pygame.draw.rect(tela, cor, (x0, base, 480, 150))
     for tx, altura in ((20, 120), (140, 170), (290, 140), (410, 110)):
         pygame.draw.rect(tela, cor, (x0 + tx, base - altura, 50, altura))
-        pygame.draw.polygon(tela, cor, [(x0 + tx - 6, base - altura), (x0 + tx + 25, base - altura - 50),
-                                         (x0 + tx + 56, base - altura)])
+        pygame.draw.polygon(tela, cor, [(x0 + tx - 6, base - altura), (x0 + tx + 25, base - altura - 50), (x0 + tx + 56, base - altura)])
         pygame.draw.rect(tela, (160, 90, 220), (x0 + tx + 20, base - altura + 25, 8, 14))  
 
 
@@ -113,14 +200,12 @@ def desenhar_tocha(tela, r, acesa, t):
     desenhar_chama(tela, r.centerx, r.bottom - 52, acesa, 0.8 + 0.1 * math.sin(t / 90))
 
 
-def desenhar_plataforma_movel(tela, r):
-    pygame.draw.line(tela, (120, 110, 150), (r.x + 6, r.y), (r.x + 6, r.y - 40), 3)
-    pygame.draw.line(tela, (120, 110, 150), (r.right - 6, r.y), (r.right - 6, r.y - 40), 3)
-    pygame.draw.rect(tela, (80, 70, 120), r)
-    pygame.draw.rect(tela, (140, 125, 200), r, 2)
-
-
 def desenhar_espelho(tela, r, t, brilho=True):
+    sprite = carregar_sprite("portal.png", (120, 110))
+    if sprite:
+        sprite.set_alpha(225 + int(30 * math.sin(t / 300)) if brilho else 90)
+        tela.blit(sprite, sprite.get_rect(midbottom=r.midbottom))
+        return
     pygame.draw.rect(tela, (110, 70, 200), r, border_radius=10)
     interior = r.inflate(-12, -12)
     luz = 150 + int(60 * math.sin(t / 300)) if brilho else 90
@@ -141,8 +226,7 @@ def desenhar_portal(tela, r, t):
         raio_x = r.w // 2 - i * 5
         raio_y = r.h // 2 - i * 9
         cor = (90 + i * 30, 60 + i * 30, 255)
-        pygame.draw.ellipse(tela, cor, (r.centerx - raio_x, r.centery - raio_y + int(math.sin(t / 200 + i) * 3),
-                                        raio_x * 2, raio_y * 2), 3)
+        pygame.draw.ellipse(tela, cor, (r.centerx - raio_x, r.centery - raio_y + int(math.sin(t / 200 + i) * 3), raio_x * 2, raio_y * 2), 3)
 
 
 def desenhar_fantasma(tela, r, direita, t):
@@ -152,7 +236,7 @@ def desenhar_fantasma(tela, r, direita, t):
     tela.blit(brilho, (r.x - 10, r.y - 10))
     pygame.draw.ellipse(tela, cor, (r.x, r.y, r.w, int(r.h * 0.65)))
     pygame.draw.rect(tela, cor, (r.x, r.y + int(r.h * 0.3), r.w, int(r.h * 0.45)))
-    for i in range(4):  # barra ondulada do "lençol"
+    for i in range(4):  
         pygame.draw.circle(tela, cor, (r.x + 4 + i * 8, r.bottom - 8 + int(math.sin(t / 140 + i * 1.5) * 3)), 6)
     lado = 4 if direita else -4
     for ox in (-6, 6):

@@ -27,7 +27,7 @@ class Menu:
                     return self.opcoes[i]
         return None
 
-    def desenhar(self, tela, centros_y, largura=260, altura=46, tamanho_fonte=26):
+    def desenhar(self, tela, centros_y, largura=260, altura=46, tamanho_fonte=26, so_destaque=False):
         
         self.retangulos = []
         for i, texto in enumerate(self.opcoes):
@@ -36,6 +36,10 @@ class Menu:
             r.centery = int(centros_y[i])
             self.retangulos.append(r)
             selecionado = i == self.indice
+            if so_destaque:  
+                if selecionado:
+                    pygame.draw.rect(tela, (255, 255, 255), r, 3, border_radius=8)
+                continue
             pygame.draw.rect(tela, (30, 15, 75) if selecionado else (20, 12, 50), r, border_radius=8)
             pygame.draw.rect(tela, (170, 120, 255) if selecionado else (95, 70, 170), r, 3, border_radius=8)
             visual.desenhar_texto(tela, texto, tamanho_fonte, (235, 225, 255) if selecionado else (170, 150, 220), centro=r.center)
